@@ -12,19 +12,20 @@ bool sdCardInitialized = false;
 
 File logFile;
 
-const uint16_t VALUE_COUNT = 8;
+const uint16_t VALUE_COUNT = 6;
 
 struct logLine
 {
-    uint32_t  micros;
-    uint16_t  speed;
-    uint16_t  sAcc; //Speed accuracy extimate
-    long      lon;
-    long      lat;
-    long      alt;
+    uint32_t        micros;
+    uint16_t        speed;
+    uint16_t        sAcc; //Speed accuracy extimate
+    long            lon;
+    long            lat;
+    long            alt;
     unsigned long   hAcc; //Horizontal accuracy estimate
     unsigned long   vAcc; //Vertical accuracy estimate
-    uint16_t  values[VALUE_COUNT];
+    uint8_t         fixType; //Position Fix Type
+    uint16_t        values[VALUE_COUNT];
 };
 
 NAV_PVT     pvtBuffer;
@@ -84,19 +85,45 @@ bool processGPS() {
 void setup() {
   Serial.begin(38400);
   
-  if (! rtc.begin()) {
+  while ((pvt.fixType != 3) || (pvt.year != 2017))
+  {
+    if (millis() > 60000) //abort if this takes more than 1 min
+      break;
+
+    if (processGPS())
+    {
+      pvt = pvtBuffer;
+    }
+  }
+
+  if (!rtc.begin()) {
     while (1);
   }
 
   if (rtc.lostPower()) {
     // following line sets the RTC to the date & time this sketch was compiled
-    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+    if (pvt.fixType == 3) //if we have GPS-fix, use this to correct RTC
+    {
+      rtc.adjust(DateTime(pvt.year, pvt.month, pvt.day, pvt.hour, pvt.min, pvt.sec));
+    } 
+    else 
+    {
+      rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+    }
     // This line sets the RTC with an explicit date & time, for example to set
     // January 21, 2014 at 3am you would call:
     // rtc.adjust(DateTime(2014, 1, 21, 3, 0, 0));
   }
 
   DateTime now = rtc.now();
+
+  if (pvt.fixType == 3)
+  {
+    now = DateTime(pvt.year, pvt.month, pvt.day, pvt.hour, pvt.min, pvt.sec);
+  }
+
+  uint32_t ms = micros();
+  uint32_t unixTime = now.unixtime();
 
   for (int i = 0; i < 6; i++) {
     pinMode(inputs[i], INPUT);  
@@ -122,14 +149,12 @@ void setup() {
     logFile = SD.open(filename + extension,FILE_WRITE);
 
     if (logFile) {
-      uint32_t ms = micros();
-      uint32_t unixTime = now.unixtime();
       logFile.write((const uint8_t *)&ms, sizeof(ms));
       logFile.write((const uint8_t *)&unixTime, sizeof(unixTime));
       logFile.write((const uint8_t *)&VALUE_COUNT, sizeof(VALUE_COUNT));
       logFile.flush();
     } else {
-      
+
     }
   }
 }
@@ -151,6 +176,7 @@ void loop() {
   line.alt = pvt.alt;
   line.hAcc = pvt.hAcc;
   line.vAcc = pvt.vAcc;
+  line.fixType = pvt.fixType;
 
   for (int i = 0; i < VALUE_COUNT; i++) {
     line.values[i] = analogRead(inputs[i]);
