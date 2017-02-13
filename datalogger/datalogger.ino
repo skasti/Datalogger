@@ -3,11 +3,11 @@
 #include "RTClib.h"
 #include "UBX.h"
 
-RTC_DS3231 rtc;
+#define GPS Serial1
 
 int inputs[] = { A0,A1,A2,A3,A6,A7 };
 
-int sdCardPin = 10;
+int sdCardPin = 53;
 bool sdCardInitialized = false;
 
 File logFile;
@@ -47,8 +47,8 @@ bool processGPS() {
   static unsigned char checksum[2];
   const int payloadSize = sizeof(NAV_PVT);
 
-  while ( Serial.available() ) {
-    byte c = Serial.read();
+  while ( GPS.available() ) {
+    byte c = GPS.read();
     if ( fpos < 2 ) {
       if ( c == UBX_HEADER[fpos] )
         fpos++;
@@ -83,7 +83,7 @@ bool processGPS() {
 }
 
 void setup() {
-  Serial.begin(38400);
+  GPS.begin(38400);
   
   while ((pvt.fixType != 3) || (pvt.year != 2017))
   {
@@ -96,31 +96,7 @@ void setup() {
     }
   }
 
-  if (!rtc.begin()) {
-    while (1);
-  }
-
-  if (rtc.lostPower()) {
-    // following line sets the RTC to the date & time this sketch was compiled
-    if (pvt.fixType == 3) //if we have GPS-fix, use this to correct RTC
-    {
-      rtc.adjust(DateTime(pvt.year, pvt.month, pvt.day, pvt.hour, pvt.min, pvt.sec));
-    } 
-    else 
-    {
-      rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-    }
-    // This line sets the RTC with an explicit date & time, for example to set
-    // January 21, 2014 at 3am you would call:
-    // rtc.adjust(DateTime(2014, 1, 21, 3, 0, 0));
-  }
-
-  DateTime now = rtc.now();
-
-  if (pvt.fixType == 3)
-  {
-    now = DateTime(pvt.year, pvt.month, pvt.day, pvt.hour, pvt.min, pvt.sec);
-  }
+  DateTime now = DateTime(pvt.year, pvt.month, pvt.day, pvt.hour, pvt.min, pvt.sec);
 
   uint32_t ms = micros();
   uint32_t unixTime = now.unixtime();
@@ -129,6 +105,7 @@ void setup() {
     pinMode(inputs[i], INPUT);  
   }
   
+  pinMode(sdCardPin, OUTPUT);
   sdCardInitialized = SD.begin(sdCardPin);
 
   String date = String(now.month())+"-";
