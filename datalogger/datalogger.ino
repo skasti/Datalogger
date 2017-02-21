@@ -2,8 +2,19 @@
 #include <Wire.h>
 #include "RTClib.h"
 #include "UBX.h"
+#include "states.h"
 
-#define GPS Serial1
+#define DEBUG Serial
+
+#if defined(__AVR_ATmega2560__)
+  #define GPS Serial1
+  bool debug = true;
+#else
+  #define GPS Serial
+  bool debug = false;
+#endif
+
+State currentState = FIXING;
 
 int inputs[] = { A0,A1,A2,A3,A6,A7 };
 

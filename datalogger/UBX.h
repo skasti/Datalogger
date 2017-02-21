@@ -1,3 +1,8 @@
+#ifndef UBX_H
+#define UBX_H
+
+#include <stdint.h>
+
 const unsigned char UBX_HEADER[] = { 0xB5, 0x62 };
 
 struct NAV_PVT {
@@ -65,3 +70,5 @@ struct NAV_VELNED {
     unsigned long   sAcc;
     unsigned long   hAcc;
 };
+
+#endif
