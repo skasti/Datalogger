@@ -3,6 +3,7 @@
 #include "RTClib.h"
 #include "UBX.h"
 #include "states.h"
+#include "gps.h"
 
 #define DEBUG Serial
 
@@ -39,72 +40,22 @@ struct logLine
     uint16_t        values[VALUE_COUNT];
 };
 
-NAV_PVT     pvtBuffer;
 NAV_PVT     pvt;
 
 int flushInterval = 5000;
 int flushCounter = 0;
 
-void calcChecksum(unsigned char* CK) {
-  memset(CK, 0, 2);
-  for (int i = 0; i < (int)sizeof(NAV_PVT); i++) {
-    CK[0] += ((unsigned char*)(&pvtBuffer))[i];
-    CK[1] += CK[0];
-  }
-}
-
-bool processGPS() {
-  static int fpos = 0;
-  static unsigned char checksum[2];
-  const int payloadSize = sizeof(NAV_PVT);
-
-  while ( GPS.available() ) {
-    byte c = GPS.read();
-    if ( fpos < 2 ) {
-      if ( c == UBX_HEADER[fpos] )
-        fpos++;
-      else
-        fpos = 0;
-    }
-    else {
-      if ( (fpos-2) < payloadSize )
-        ((unsigned char*)(&pvtBuffer))[fpos-2] = c;
-
-      fpos++;
-
-      if ( fpos == (payloadSize+2) ) {
-        calcChecksum(checksum);
-      }
-      else if ( fpos == (payloadSize+3) ) {
-        if ( c != checksum[0] )
-          fpos = 0;
-      }
-      else if ( fpos == (payloadSize+4) ) {
-        fpos = 0;
-        if ( c == checksum[1] ) {
-          return true;
-        }
-      }
-      else if ( fpos > (payloadSize+4) ) {
-        fpos = 0;
-      }
-    }
-  }
-  return false;
-}
+Gps gps;
 
 void setup() {
-  GPS.begin(38400);
+  gps.setup();
   
-  while ((pvt.fixType != 3) || (pvt.year != 2017))
+  while (!gps.hasTimeFix())
   {
     if (millis() > 60000) //abort if this takes more than 1 min
       break;
 
-    if (processGPS())
-    {
-      pvt = pvtBuffer;
-    }
+    gps.update();
   }
 
   DateTime now = DateTime(pvt.year, pvt.month, pvt.day, pvt.hour, pvt.min, pvt.sec);
@@ -148,9 +99,8 @@ void setup() {
 }
 
 void loop() {  
-  if ( processGPS() ) {
-    pvt = pvtBuffer;
-  }
+  gps.update();
+  pvt = gps.getLatest();
 
   unsigned long ms = micros();
   
