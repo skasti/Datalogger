@@ -1,7 +1,7 @@
 #ifndef UBX_H
 #define UBX_H
 
-#include <stdint.h>
+#include <inttypes.h>
 
 const unsigned char UBX_HEADER[] = { 0xB5, 0x62 };
 
