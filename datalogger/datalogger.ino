@@ -4,6 +4,7 @@
 #include "UBX.h"
 #include "states.h"
 #include "gps.h"
+#include <U8g2lib.h>
 
 #define DEBUG Serial
 
@@ -15,16 +16,18 @@
   bool debug = false;
 #endif
 
+U8G2_SH1106_128X64_NONAME_F_HW_I2C display(U8G2_R0);
+
 State currentState = FIXING;
 
-int inputs[] = { A0,A1,A2,A3,A6,A7 };
+int inputs[] = { A0,A1,A2,A3,A4,A5,A6,A7,A8,A9 };
 
 int sdCardPin = 53;
 bool sdCardInitialized = false;
 
 File logFile;
 
-const uint16_t VALUE_COUNT = 6;
+const uint16_t VALUE_COUNT = 10;
 
 struct logLine
 {
@@ -45,17 +48,51 @@ NAV_PVT     pvt;
 int flushInterval = 5000;
 int flushCounter = 0;
 
+int drawInterval = 0;
+int drawCounter = 0;
+
+char fixingStatus[]   = "FIXING              ";
+char fixedStatus[]    = "FIXED               ";
+char loggingStatus[]  = "LOGGING             ";
+
 Gps gps;
+long lastPrintMillis;
 
 void setup() {
+  display.begin();
   gps.setup();
+
+  Serial3.begin(9600);
+
+  Serial3.write(0xAC);
+  Serial3.write(0xDC);
+  Serial3.write(0xFC);
+  Serial3.write(0x03);
+  Serial3.write(0x01);
+
+  delay(10);
+
+  Serial3.write(0xAC);
+  Serial3.write(0xDC);
+  Serial3.write(0xFC);
+  Serial3.write(0x02);
+  Serial3.write(fixingStatus);
   
   while (!gps.hasTimeFix())
   {
-    if (millis() > 60000) //abort if this takes more than 1 min
+    if (millis() > 6000) //abort if this takes more than 1 min
       break;
 
     gps.update();
+  }
+
+  if (gps.hasTimeFix())
+  {
+    Serial3.write(0xAC);
+    Serial3.write(0xDC);
+    Serial3.write(0xFC);
+    Serial3.write(0x02);
+    Serial3.write(fixedStatus);
   }
 
   DateTime now = DateTime(pvt.year, pvt.month, pvt.day, pvt.hour, pvt.min, pvt.sec);
@@ -96,7 +133,16 @@ void setup() {
 
     }
   }
+  Serial3.write(0xAC);
+  Serial3.write(0xDC);
+  Serial3.write(0xFC);
+  Serial3.write(0x03);
+  Serial3.write(0x02);
+  lastPrintMillis = millis();
 }
+
+int t = 2;
+
 
 void loop() {  
   gps.update();
@@ -128,6 +174,20 @@ void loop() {
   {
     flushCounter = 0;
     logFile.flush();
+  } 
+
+  if (lastPrintMillis + 50 < millis())
+  {
+    lastPrintMillis = millis();
+    Serial3.write(0xAC);
+    Serial3.write(0xDC);
+    Serial3.write(0xFC);
+    Serial3.write(0x01);
+
+    for (int i = 0; i < VALUE_COUNT; i++)
+    {
+      Serial3.write(line.values[i]);
+    }
   }
 
   delay(4);
