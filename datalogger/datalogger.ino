@@ -5,6 +5,8 @@
 #include "states.h"
 #include "gps.h"
 #include <U8g2lib.h>
+#include "nanogpu-client.h"
+#include "SparkFunMLX90614.h"
 
 #define DEBUG Serial
 
@@ -15,8 +17,6 @@
   #define GPS Serial
   bool debug = false;
 #endif
-
-U8G2_SH1106_128X64_NONAME_F_HW_I2C display(U8G2_R0);
 
 State currentState = FIXING;
 
@@ -29,7 +29,7 @@ File logFile;
 
 const uint16_t VALUE_COUNT = 10;
 
-struct logLine
+struct LogLine
 {
     uint32_t        micros;
     uint16_t        speed;
@@ -43,69 +43,78 @@ struct logLine
     uint16_t        values[VALUE_COUNT];
 };
 
+LogLine line;
+
 NAV_PVT     pvt;
 
 int flushInterval = 5000;
 int flushCounter = 0;
 
-int drawInterval = 0;
+int drawInterval = 1000;
 int drawCounter = 0;
 
-char fixingStatus[]   = "FIXING              ";
-char fixedStatus[]    = "FIXED               ";
-char loggingStatus[]  = "LOGGING             ";
+unsigned char fixingStatus[]   = "FIXING              ";
+unsigned char fixedStatus[]    = "FIXED               ";
+unsigned char loggingStatus[]  = "LOGGING             ";
+unsigned char addressStatus[]  = "SET ADDR            ";
+unsigned char failedStatus[]   = "FAILED              ";
+unsigned char initIRStatus[]   = "INIT IR             ";
 
 Gps gps;
-long lastPrintMillis;
+NanoGpuClient gpuClient;
+uint8_t irIds[] = {0x10,0x11,0x12,0x13,0x14,0x15};
+IRTherm ir[6];
+int16_t temp[6] = {0,0,0,0,0,0};
+bool irEnabled[6];
+int currentIR = 0;
+
+bool statusLogging = false;
+int t = 2;
 
 void setup() {
-  display.begin();
   gps.setup();
-
-  Serial3.begin(9600);
-
-  Serial3.write(0xAC);
-  Serial3.write(0xDC);
-  Serial3.write(0xFC);
-  Serial3.write(0x03);
-  Serial3.write(0x01);
-
-  delay(10);
-
-  Serial3.write(0xAC);
-  Serial3.write(0xDC);
-  Serial3.write(0xFC);
-  Serial3.write(0x02);
-  Serial3.write(fixingStatus);
+  gpuClient.setup();
+  Serial.begin(9600);
   
+  gpuClient.sendMode(STATUSTEXT);
+  delay(10);  
+  gpuClient.sendStatus(initIRStatus);
+
+  for (int i = 0; i < 6; i++) {
+    ir[i].begin(irIds[i]);
+    ir[i].setUnit(TEMP_C);
+
+    if (ir[i].read())
+    {
+      irEnabled[i] = true;
+    }
+  }
+
+  for (int i = 0; i < 10; i++) {
+    pinMode(inputs[i], INPUT);  
+  }
+  
+  pinMode(sdCardPin, OUTPUT);
+  sdCardInitialized = SD.begin(sdCardPin);
+
+  gpuClient.sendStatus(fixingStatus);
   while (!gps.hasTimeFix())
   {
-    if (millis() > 6000) //abort if this takes more than 1 min
+    if (millis() > 12000) //abort if this takes more than 1 min
       break;
 
     gps.update();
   }
 
-  if (gps.hasTimeFix())
-  {
-    Serial3.write(0xAC);
-    Serial3.write(0xDC);
-    Serial3.write(0xFC);
-    Serial3.write(0x02);
-    Serial3.write(fixedStatus);
+  if (!gps.hasTimeFix()) {
+    gpuClient.sendStatus(failedStatus);
+    delay(1000);
   }
 
   DateTime now = DateTime(pvt.year, pvt.month, pvt.day, pvt.hour, pvt.min, pvt.sec);
 
   uint32_t ms = micros();
   uint32_t unixTime = now.unixtime();
-
-  for (int i = 0; i < 6; i++) {
-    pinMode(inputs[i], INPUT);  
-  }
-  
-  pinMode(sdCardPin, OUTPUT);
-  sdCardInitialized = SD.begin(sdCardPin);
 
   String date = String(now.month())+"-";
   date = date + now.day();
@@ -121,6 +130,8 @@ void setup() {
     filename = date + "-" + counter;
   }
 
+  gpuClient.sendStatus(loggingStatus);
+
   if (sdCardInitialized) {
     logFile = SD.open(filename + extension,FILE_WRITE);
 
@@ -133,24 +144,60 @@ void setup() {
 
     }
   }
-  Serial3.write(0xAC);
-  Serial3.write(0xDC);
-  Serial3.write(0xFC);
-  Serial3.write(0x03);
-  Serial3.write(0x02);
-  lastPrintMillis = millis();
 }
 
-int t = 2;
+void updateIRTemps()
+{
+  if (irEnabled[currentIR] && ir[currentIR].read()) {
+    temp[currentIR] = ir[currentIR].object() * 10;
+  }  
 
+  currentIR++;
+
+  if (currentIR > 5)
+    currentIR = 0;
+}
+
+bool flush()
+{
+  flushCounter++;
+
+  if (flushCounter > flushInterval)
+  {
+    flushCounter = 0;
+    logFile.flush();
+    return true;
+  }
+
+  return false;
+}
+
+bool draw()
+{
+  drawCounter++;
+
+  if (drawCounter > drawInterval)
+  {
+    if (!statusLogging)
+    {
+      drawInterval = 50;
+      statusLogging = true;
+      gpuClient.sendMode(VALUES);
+    }
+
+    drawCounter = 0;
+    gpuClient.sendValues(line.values);
+    return true;
+  }
+
+  return false;
+}
 
 void loop() {  
   gps.update();
   pvt = gps.getLatest();
 
   unsigned long ms = micros();
-  
-  struct logLine line;
   line.micros = ms;
 
   line.speed = pvt.gSpeed;
@@ -163,32 +210,19 @@ void loop() {
   line.fixType = pvt.fixType;
 
   for (int i = 0; i < VALUE_COUNT; i++) {
-    line.values[i] = analogRead(inputs[i]);
+    if (i < 6)
+    {
+      line.values[i] = temp[i];
+    } else {
+      line.values[i] = analogRead(inputs[i]);
+    }    
   }
 
   logFile.write((const uint8_t *)&line, sizeof(line));
 
-  flushCounter++;
-
-  if (flushCounter > flushInterval)
-  {
-    flushCounter = 0;
-    logFile.flush();
+  if (!flush() && !draw()) {
+    updateIRTemps();
   } 
 
-  if (lastPrintMillis + 50 < millis())
-  {
-    lastPrintMillis = millis();
-    Serial3.write(0xAC);
-    Serial3.write(0xDC);
-    Serial3.write(0xFC);
-    Serial3.write(0x01);
-
-    for (int i = 0; i < VALUE_COUNT; i++)
-    {
-      Serial3.write(line.values[i]);
-    }
-  }
-
-  delay(4);
+  delay(3);
 }
