@@ -15,17 +15,49 @@ void NanoGpu::setup()
 
     int eepromState = EEPROM.read(0);
 
-    //Unwritten EEPROM locations have the value 255, 
-    //so this means EEPROM has not been initiated
+    // Unwritten EEPROM locations have the value 255, 
+    // so this means EEPROM has not been initiated
     if (eepromState == 255)
+    {
         initEEPROM();
+        setStatus("ROM Init");
+    }
     else
+    {
         readEEPROM();
+        setStatus("ROM Read");
+    }
+}
+
+void NanoGpu::setStatus(const char newStatus[])
+{
+    bool eos = false;
+    for (int i = 0; i < 10; i++)
+    {
+        if (eos || i == 9)
+        {
+            status[i] = 0x00;
+        }
+        else 
+        {
+            char c = newStatus[i];
+        
+            if (c != 0x00)
+            {
+                status[i] = c;
+            }
+            else
+            {
+                status[i] = 0x00;
+                eos = true;
+            }
+        }        
+    }
 }
 
 void NanoGpu::initEEPROM()
 {
-    for (int i = 0; i < 10; i++)
+    for (int i = 0; i < VALUES_COUNT; i++)
     {
         int minIndex = i * sizeof(uint16_t) * 2;
         int maxIndex = minIndex + sizeof(uint16_t);
@@ -39,17 +71,13 @@ void NanoGpu::initEEPROM()
 
 void NanoGpu::readEEPROM()
 {
-    for (int i = 0; i < 10; i++)
+    for (int i = 0; i < VALUES_COUNT; i++)
     {
         int minIndex = i * sizeof(uint16_t) * 2;
         int maxIndex = minIndex + sizeof(uint16_t);
 
         EEPROM.get(minIndex, mins[i]);
         EEPROM.get(maxIndex, maxs[i]);
-
-        int interval = maxs[i] - mins[i];
-        double multiplier = (double)interval / 50.0;
-        multipliers[i] = multiplier;
     }
 }
 
@@ -78,21 +106,12 @@ bool NanoGpu::checksumIsValid()
 
 void NanoGpu::processSerial()
 {
-    dot_h = 1;
-    dot_x = 0;
-    dot_w = 1;
-
     while ( Serial.available() ) 
     {
         byte c = Serial.read();
-        dot_x++;
-
-        if (dot_x > 128)
-            dot_x = 0;
         
         if ( fpos < sizeof(GPU_HEADER)) 
         {
-            dot_y = 1;
 
             if ( c == GPU_HEADER[fpos])
                 fpos++;
@@ -102,44 +121,40 @@ void NanoGpu::processSerial()
         else if (fpos == sizeof(GPU_HEADER)) 
         {
             package = c;
-            dot_y = 2;
-        
+
             switch (package)
             {
                 case PKG_MODE_ID:
                     fpos++;
-                    payloadSize = sizeof(GPU_HEADER) + sizeof(PKG_MODE) + 3;
+                    payloadSize = sizeof(GPU_HEADER) + sizeof(PKG_MODE) + CHECKSUM_LENGTH;
                     break;
                 case PKG_STATUS_ID:
                     fpos++;
-                    payloadSize = sizeof(GPU_HEADER) + sizeof(PKG_STATUS) + 3;
+                    payloadSize = sizeof(GPU_HEADER) + sizeof(PKG_STATUS) + CHECKSUM_LENGTH;
                     break;
                 case PKG_VALUES_ID:
                     fpos++;
-                    payloadSize = sizeof(GPU_HEADER) + sizeof(PKG_VALUES) + 3;
+                    payloadSize = sizeof(GPU_HEADER) + sizeof(PKG_VALUES) + CHECKSUM_LENGTH;
                     break;
                 case PKG_CALIBRATE_ID:
                     fpos++;
-                    payloadSize = sizeof(GPU_HEADER) + sizeof(PKG_CALIBRATE) + 3;
+                    payloadSize = sizeof(GPU_HEADER) + sizeof(PKG_CALIBRATE) + CHECKSUM_LENGTH;
                     break;
                 case PKG_STORE_CALIBRATION_ID:
                     fpos++;
-                    payloadSize = sizeof(GPU_HEADER) + sizeof(PKG_STORE_CALIBRATION) + 3;
+                    payloadSize = sizeof(GPU_HEADER) + sizeof(PKG_STORE_CALIBRATION) + CHECKSUM_LENGTH;
                     break;
                 case PKG_READ_CALIBRATION_ID:
                     fpos++;
-                    payloadSize = sizeof(GPU_HEADER) + sizeof(PKG_READ_CALIBRATION) + 3;
+                    payloadSize = sizeof(GPU_HEADER) + sizeof(PKG_READ_CALIBRATION) + CHECKSUM_LENGTH;
                     break;
                 default:
                     fpos = 0;
                     break;
             }
-
-            dot_w = 1 + package;
         }
         else
         {
-            dot_y = 3;
             if (fpos < payloadSize)
             {
                 buffer[fpos-sizeof(GPU_HEADER) - 1] = c;
@@ -179,7 +194,6 @@ void NanoGpu::processSerial()
                     }
                     else
                     {
-                        dot_h = 5;
                         Serial.write(0xFF);
                     }
 
@@ -209,10 +223,15 @@ void NanoGpu::updateCalibration()
 
     calibrateIndex = package.channel;
 
-    if (calibrateIndex >= 10)
-        calibrateIndex = 255;
+    if (calibrateIndex >= VALUES_COUNT)
+    {
+        calibrateIndex = 0xFF;
+        setStatus("CAL STOP");
+    }
     else
     {
+        setStatus("CAL START");
+        
         mins[calibrateIndex] = 1000;
         maxs[calibrateIndex] = 0;
     }
@@ -222,7 +241,7 @@ void NanoGpu::storeCalibration()
 {
     PKG_STORE_CALIBRATION package = *((PKG_STORE_CALIBRATION*)(&buffer));
 
-    if (package.channel >= 10)
+    if (package.channel >= VALUES_COUNT)
         return;
 
     int minIndex = package.channel * sizeof(uint16_t) * 2;
@@ -236,7 +255,7 @@ void NanoGpu::readCalibration()
 {
     PKG_READ_CALIBRATION package = *((PKG_READ_CALIBRATION*)(&buffer));
 
-    if (package.channel >= 10)
+    if (package.channel >= VALUES_COUNT)
         return;
 
     int minIndex = package.channel * sizeof(uint16_t) * 2;
@@ -244,31 +263,28 @@ void NanoGpu::readCalibration()
 
     EEPROM.get(minIndex, mins[package.channel]);
     EEPROM.get(maxIndex, maxs[package.channel]);
-
-    int interval = maxs[package.channel] - mins[package.channel];
-    double multiplier = (double)interval / 50.0;
-    multipliers[package.channel] = multiplier;
 }
 
 void NanoGpu::updateValues() 
 {
     PKG_VALUES valuePackage = *((PKG_VALUES*)(&buffer));
 
-    for (int i = 0; i < 10; i++)
+    for (int i = 0; i < VALUES_COUNT; i++)
     {
         values[i] = valuePackage.values[i];
 
         if (calibrateIndex == i)
         {
             if (values[i] < mins[i])
+            {
                 mins[i] = values[i];
-            
-            if (values[i] > maxs[i])
+                setStatus("MINS");
+            }            
+            else if (values[i] > maxs[i])
+            {
                 maxs[i] = values[i];
-
-            int interval = maxs[i] - mins[i];
-            double multiplier = (double)interval / 50.0;
-            multipliers[i] = multiplier;
+                setStatus("MAXS");
+            }            
         }
     }
 }
@@ -277,43 +293,35 @@ void NanoGpu::updateStatus()
 {
     PKG_STATUS statusPackage = *((PKG_STATUS*)(&buffer));
 
-    bool eos = false;
-
-    for (int i = 0; i < 20; i++)
-    {
-        char c = statusPackage.characters[i];
-
-        if (eos)
-        {
-            status[i] = 0x00;
-        }
-        else if (c != 0x00)
-        {
-            status[i] = c;
-        }
-        else
-        {
-            eos = true;
-        }
-    }
+    setStatus(statusPackage.characters);
 }
 
 void NanoGpu::renderValues()
 {
-    for (int i = 0; i < 10; i++)
-    {
-        int realValue = values[i] - mins[i];
-        int interval = maxs[i] - mins[i];
-        double multiplier = (double)interval / 50.0;
+    int width = 128 / VALUES_COUNT - 2;
 
-        int height = (int)((double)realValue * multiplier);
-        display.drawBox(i * 12, 57-height, 10, height+1);
+    for (int i = 0; i < VALUES_COUNT; i++)
+    {
+        if (mins[i] < maxs[i])
+        {
+            int16_t value = values[i];
+            
+            if (value < mins[i])
+                value = mins[i];
+
+            double realValue = value - mins[i];
+            int interval = maxs[i] - mins[i];
+            double multiplier = 50.0 / (double)interval;
+
+            int height = (int)(realValue * multiplier);
+            display.drawBox(i * (width + 2), 57-height, width, height+1);
+        }
     }
 }
 
 void NanoGpu::renderStatusText()
 {
-    display.setFont(u8g2_font_ncenB14_tr);
+    display.setFont(u8g2_font_ncenB10_tr);
     display.drawStr(5,25,status);    
 }
 
@@ -323,18 +331,17 @@ void NanoGpu::update()
         processSerial();
 
     display.clearBuffer();    
-    display.drawBox(fpos, 0, payloadSize - fpos, 1);
-    display.drawBox(dot_x, dot_y, dot_w, dot_h);
+    // display.drawBox(fpos, 0, payloadSize - fpos, 1);
 
-    for (int i = 0; i < 128; i+= 2)
-    {
-        display.drawBox(i, 58, 1, 2);
-    }
+    // for (int i = 0; i < 128; i+= 2)
+    // {
+    //     display.drawBox(i, 58, 1, 2);
+    // }
 
-    display.drawBox(checksum[0] * 2, 60, 2, 1);
-    display.drawBox(buffer[payloadSize - 2] * 2, 61, 2, 1);
-    display.drawBox(checksum[1] * 2, 62, 2, 1);
-    display.drawBox(buffer[payloadSize - 1] * 2, 63, 2, 1);
+    // display.drawBox(checksum[0] * 2, 60, 2, 1);
+    // display.drawBox(buffer[payloadSize - 2] * 2, 61, 2, 1);
+    // display.drawBox(checksum[1] * 2, 62, 2, 1);
+    // display.drawBox(buffer[payloadSize - 1] * 2, 63, 2, 1);
 
     switch(mode)
     {

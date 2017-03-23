@@ -6,11 +6,6 @@
 #include "coms.h"
 
 class NanoGpu {
-    int dot_x = 0;
-    int dot_y = 1;
-    int dot_w = 1;
-    int dot_h = 1;
-
     int fpos = 0;
     int payloadSize = 3;
     byte package = 0x00;
@@ -19,11 +14,10 @@ class NanoGpu {
     U8G2_SH1106_128X64_NONAME_F_HW_I2C display = U8G2_SH1106_128X64_NONAME_F_HW_I2C(U8G2_R0);
 
     GPU_MODE mode = STATUSTEXT;    
-    char status[20] = "IDLE";
-    uint16_t values[10] = {0,0,0,0,0,0,0,0,0,0};
-    uint16_t mins[10] = {0,0,0,0,0,0,0,0,0,0};
-    uint16_t maxs[10] = {1000,1000,1000,1000,1000,1000,1000,1000,1000,1000};
-    double multipliers[10] = {0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05};
+    char status[10] = "IDLE";
+    uint16_t values[VALUES_COUNT] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+    uint16_t mins[VALUES_COUNT] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+    uint16_t maxs[VALUES_COUNT] = {120,120,120,120,120,120,1000,1000,1000,1000,1000,1000,1000,1000};
     
     uint8_t calibrateIndex = 255;
 
@@ -43,6 +37,7 @@ class NanoGpu {
         void initEEPROM();
 
     public:
+        void setStatus(const char newStatus[]);
         void setup();
         void update();
 };
