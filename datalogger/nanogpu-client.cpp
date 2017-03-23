@@ -6,8 +6,6 @@
 #include "WProgram.h"
 #endif
 
-#define GPU Serial3
-
 void NanoGpuClient::setup()
 {
     GPU.begin(9600);
@@ -54,7 +52,7 @@ void NanoGpuClient::sendPacket(unsigned char packetId, unsigned char* payload, i
 
             response = GPU.read();
 
-            if (tries > 3)
+            if (tries > 5)
                 break;
         }
         else
@@ -70,12 +68,49 @@ void NanoGpuClient::sendMode(GPU_MODE mode)
     sendPacket(PKG_MODE_ID, (unsigned char*)&mode, sizeof(PKG_MODE), true);    
 }
 
-void NanoGpuClient::sendStatus(unsigned char* status)
+void NanoGpuClient::sendStatus(char status[])
 {
-    sendPacket(PKG_STATUS_ID, (unsigned char*)status, sizeof(PKG_STATUS), true);    
+    PKG_STATUS packet;
+
+    bool eos = false;
+    for (int i = 0; i < sizeof(PKG_STATUS); i++)
+    {
+        if (eos)
+        {
+            packet.characters[i] = 0x00;
+        }
+        else if (status[i] != 0x00)
+        {
+            packet.characters[i] = status[i];
+        }
+        else 
+        {
+            packet.characters[i] = 0x00;
+            eos = true;
+        }
+    }
+
+    packet.characters[sizeof(PKG_STATUS) - 1] = 0x00;
+
+    sendPacket(PKG_STATUS_ID, (unsigned char*)&packet, sizeof(PKG_STATUS), true);    
 }
 
 void NanoGpuClient::sendValues(uint16_t* values)
 {
     sendPacket(PKG_VALUES_ID, (unsigned char*)values, sizeof(PKG_VALUES), false);    
+}
+
+void NanoGpuClient::sendCalibrate(uint8_t channel)
+{
+    sendPacket(PKG_CALIBRATE_ID, (unsigned char*)&channel, sizeof(PKG_CALIBRATE), true);    
+}
+
+void NanoGpuClient::sendStoreCalibration(uint8_t channel)
+{
+    sendPacket(PKG_STORE_CALIBRATION_ID, (unsigned char*)&channel, sizeof(PKG_STORE_CALIBRATION), true);    
+}
+
+void NanoGpuClient::sendResetCalibration(uint8_t channel)
+{
+    sendPacket(PKG_READ_CALIBRATION_ID, (unsigned char*)&channel, sizeof(PKG_READ_CALIBRATION), true);    
 }
