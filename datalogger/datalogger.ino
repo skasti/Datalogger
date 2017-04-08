@@ -18,9 +18,17 @@
   bool debug = false;
 #endif
 
-State currentState = FIXING;
+unsigned long ms = 0;
+unsigned long nextLogTime = 0;
+unsigned long nextDrawTime = 0;
+unsigned long nextInputUpdate = 0;
 
-int inputs[] = { A0,A1,A2,A3,A4,A5,A6,A7,A8,A9 };
+unsigned long drawInterval = 60000; // 100ms;
+unsigned long loggingDrawInterval = 250000; // 200ms;
+unsigned long logInterval = 4000; // 4ms;
+unsigned long inputUpdateInterval = 20000; // 20ms;
+
+int inputs[] = { A0,A1,A2,A3,A4,A5,A6,A7 };
 
 int sdCardPin = 53;
 bool sdCardInitialized = false;
@@ -28,6 +36,9 @@ bool sdCardInitialized = false;
 int upPin = 24;
 int downPin = 26;
 int enterPin = 28;
+int toggleUIPin = 30;
+
+int toggleState, prevToggleState;
 
 File logFile;
 
@@ -51,12 +62,6 @@ LogLine line;
 
 NAV_PVT     pvt;
 
-int flushInterval = 5000;
-int flushCounter = 0;
-
-int drawInterval = 20;
-int drawCounter = 0;
-
 Gps gps;
 NanoGpuClient gpuClient;
 uint8_t irIds[] = {0x10,0x11,0x12,0x13,0x14,0x15};
@@ -69,8 +74,6 @@ bool isLogging = false;
 bool isMenu = true;
 bool isCalibrating = false;
 int calibrateIndex = 0xFF;
-
-int t = 2;
 
 MenuItem menuItems[] = {
   MenuItem(0x1000, 0x0000, 0x1000, "Start Log"),
@@ -111,24 +114,6 @@ void sendDebug(char text[])
 }
 
 void setup() {
-  digitalWrite(13,HIGH);
-  delay(250);
-  digitalWrite(13,LOW);
-  delay(250);
-  digitalWrite(13,HIGH);
-  delay(250);
-  digitalWrite(13,LOW);
-  delay(250);
-  digitalWrite(13,HIGH);
-  delay(250);
-  digitalWrite(13,LOW);
-  delay(250);
-  digitalWrite(13,HIGH);
-  delay(250);
-  digitalWrite(13,LOW);
-  delay(250);
-  digitalWrite(13,HIGH);
-  delay(250);
   gps.setup();
   gpuClient.setup();
   Serial.begin(9600);
@@ -165,13 +150,41 @@ void setup() {
     pinMode(inputs[i], INPUT);  
   }
 
+  pinMode(toggleUIPin, INPUT_PULLUP);
+  toggleState = digitalRead(toggleUIPin);
+
+  getGPSFix();
+
+  digitalWrite(13,HIGH);
+  delay(250);
+  digitalWrite(13,LOW);
+
+  initSD();
+}
+
+void getGPSFix()
+{
+  if (gps.hasTimeFix())
+    return;
+
+  unsigned long giveUpTime = millis() + 60000;
+  int enterState = digitalRead(enterPin);
+  int previousEnterState = enterState;
+
   sendDebug("GPS FIX");
   while (!gps.hasTimeFix())
   {
-    if (millis() > 60000) //abort if this takes more than 1 min
+    previousEnterState = enterState;
+    enterState = digitalRead(enterPin);
+    
+    if (millis() > giveUpTime) //abort if this takes more than 1 min
+    {
+      sendDebug("TIMEOUT");
+      delay(500);
       break;
+    }
 
-    if (digitalRead(enterPin) == LOW)
+    if (enterState == LOW && previousEnterState == HIGH)
     {
       sendDebug("SKIP");
       delay(500);
@@ -179,19 +192,9 @@ void setup() {
     }
 
     gps.update();
+
+    delay(10);
   }
-
-  if (!gps.hasTimeFix()) 
-  {
-    sendDebug("FAILED");
-    delay(1000);
-  }
-
-  digitalWrite(13,HIGH);
-  delay(250);
-  digitalWrite(13,LOW);
-
-  initSD();
 }
 
 void initSD()
@@ -222,31 +225,16 @@ void updateIRTemps()
     currentIR = 0;
 }
 
-bool flush()
-{
-  if (!isLogging)
-    return false;
-
-  flushCounter++;
-
-  if (flushCounter > flushInterval)
-  {
-    flushCounter = 0;
-    logFile.flush();
-    return true;
-  }
-
-  return false;
-}
-
 bool draw()
 {
-  drawCounter++;
-
-  if (drawCounter > drawInterval)
+  if (ms > nextDrawTime)
   {
-    drawCounter = 0;
     gpuClient.sendValues(line.values);
+    nextDrawTime = ms + drawInterval;
+
+    if (isLogging)
+      nextDrawTime = ms + loggingDrawInterval;
+
     return true;
   }
 
@@ -264,6 +252,8 @@ bool initLogFile()
     delay(1000);
     return false;
   }
+
+  getGPSFix();
 
   DateTime now = DateTime(pvt.year, pvt.month, pvt.day, pvt.hour, pvt.min, pvt.sec);
 
@@ -381,99 +371,133 @@ void resetCalibration()
   gpuClient.sendResetCalibration(calibrateIndex);
 }
 
+void updateToggleUIButton()
+{
+  prevToggleState = toggleState;
+  toggleState = digitalRead(toggleUIPin);
+
+  if (toggleState == LOW && prevToggleState == HIGH)
+  {
+    toggleUI();
+  }
+}
+
 void loop()
 {
   //Stuff that always should be done:
+  ms = micros();
   gps.update();
-  pvt = gps.getLatest();
-  unsigned long ms = micros();
-  line.micros = ms;
 
-  line.speed = pvt.gSpeed;
-  line.sAcc = pvt.sAcc;
-  line.lon = pvt.lon;
-  line.lat = pvt.lat;
-  line.alt = pvt.alt;
-  line.hAcc = pvt.hAcc;
-  line.vAcc = pvt.vAcc;
-  line.fixType = pvt.fixType;
-
-  for (int i = 0; i < VALUE_COUNT; i++) {
-    if (i < 6)
-    {
-      line.values[i] = temp[i];
-    } else {
-      line.values[i] = analogRead(inputs[i-6]);
-    }    
-  }
-
-  if (isLogging)
+  if (ms > nextLogTime)
   {
-    logFile.write((const uint8_t *)&line, sizeof(line));
+    pvt = gps.getLatest();
+    line.micros = ms;
+
+    line.speed = pvt.gSpeed;
+    line.sAcc = pvt.sAcc;
+    line.lon = pvt.lon;
+    line.lat = pvt.lat;
+    line.alt = pvt.alt;
+    line.hAcc = pvt.hAcc;
+    line.vAcc = pvt.vAcc;
+    line.fixType = pvt.fixType;
+
+    for (int i = 0; i < VALUE_COUNT; i++) {
+      if (i < 6)
+      {
+        line.values[i] = temp[i];
+      } else {
+        line.values[i] = analogRead(inputs[i-6]);
+      }    
+    }
+
+    if (isLogging)
+    {
+      logFile.write((const uint8_t *)&line, sizeof(line));
+    }
+
+    nextLogTime = ms + logInterval;
   }
 
   if (!draw() || !isLogging) {
     updateIRTemps();
-  } 
+  }
 
-  uint16_t menuAction = menu.update();
-
-  switch(menuAction)
+  if (ms > nextInputUpdate)
   {
-    case 0x1100: //Toggle logging
-      toggleLogging();
-      break;
-    case 0x3000: //Toggle UI
-      toggleUI();
-      break;
+    updateToggleUIButton();
 
-    case 0x2110: //Select Ch 1
-      channelSelect(6);
-      break;
-    case 0x2120: //Select Ch 2
-      channelSelect(7);
-      break;
-    case 0x2130: //Select Ch 3
-      channelSelect(8);
-      break;
-    case 0x2140: //Select Ch 4
-      channelSelect(9);
-      break;
-    case 0x2150: //Select Ch 5
-      channelSelect(10);
-      break;
-    case 0x2160: //Select Ch 6
-      channelSelect(11);
-      break;
-    case 0x2170: //Select Ch 7
-      channelSelect(12);
-      break;
-    case 0x2180: //Select Ch 8
-      channelSelect(13);
-      break;
+    if (isMenu)
+    {
+      uint16_t menuAction = menu.update();
 
-    case 0x2210: //Start Calibration
-      startCalibration();
-      break;
+      switch(menuAction)
+      {
+        case 0x1100: //Toggle logging
+          toggleLogging();
+          break;
+        case 0x3000: //Toggle UI
+          toggleUI();
+          break;
 
-    case 0x2310: //Stop Calibration
-      stopCalibration();
-      break;
+        case 0x2110: //Select Ch 1
+          channelSelect(6);
+          break;
+        case 0x2120: //Select Ch 2
+          channelSelect(7);
+          break;
+        case 0x2130: //Select Ch 3
+          channelSelect(8);
+          break;
+        case 0x2140: //Select Ch 4
+          channelSelect(9);
+          break;
+        case 0x2150: //Select Ch 5
+          channelSelect(10);
+          break;
+        case 0x2160: //Select Ch 6
+          channelSelect(11);
+          break;
+        case 0x2170: //Select Ch 7
+          channelSelect(12);
+          break;
+        case 0x2180: //Select Ch 8
+          channelSelect(13);
+          break;
 
-    case 0x2410: //Stop Calibration
-      storeCalibration();
-      break;
+        case 0x2210: //Start Calibration
+          startCalibration();
+          break;
 
-    case 0x2510: //Stop Calibration
-      resetCalibration();
-      break;
-    
-    default:
-      break;
+        case 0x2310: //Stop Calibration
+          stopCalibration();
+          break;
+
+        case 0x2410: //Stop Calibration
+          storeCalibration();
+          break;
+
+        case 0x2510: //Stop Calibration
+          resetCalibration();
+          break;
+        
+        default:
+          break;
+      }
+
+      //gpuClient.sendMode(STATUSTEXT);
+    } else {
+      //gpuClient.sendMode(VALUES);
+    }
+
+    nextInputUpdate = ms + inputUpdateInterval;
   }
 
   if (isMenu)
     menu.render(gpuClient);
 
-  delay(3);
+  if (gps.hasTimeFix())
+    digitalWrite(13, HIGH);
+  else
+    digitalWrite(13, LOW);
 }
