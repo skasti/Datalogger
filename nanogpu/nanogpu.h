@@ -21,6 +21,8 @@ class NanoGpu {
     
     uint8_t calibrateIndex = 255;
 
+    unsigned long nextDrawTime = 0;
+
     private:
         void updateMode();
         void updateCalibration();

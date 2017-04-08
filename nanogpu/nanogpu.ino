@@ -10,5 +10,4 @@ void setup() {
 
 void loop() {
     Gpu.update();
-    delay(10);
 }

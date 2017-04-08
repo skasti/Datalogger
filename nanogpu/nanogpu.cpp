@@ -330,31 +330,35 @@ void NanoGpu::update()
     if (Serial.available())
         processSerial();
 
-    display.clearBuffer();    
-    // display.drawBox(fpos, 0, payloadSize - fpos, 1);
-
-    // for (int i = 0; i < 128; i+= 2)
-    // {
-    //     display.drawBox(i, 58, 1, 2);
-    // }
-
-    // display.drawBox(checksum[0] * 2, 60, 2, 1);
-    // display.drawBox(buffer[payloadSize - 2] * 2, 61, 2, 1);
-    // display.drawBox(checksum[1] * 2, 62, 2, 1);
-    // display.drawBox(buffer[payloadSize - 1] * 2, 63, 2, 1);
-
-    switch(mode)
+    if (millis() > nextDrawTime)
     {
-        case STATUSTEXT:
-            renderStatusText();
-            break;
-        case VALUES:
-            renderValues();
-            break;
-        default:
-            mode = STATUSTEXT;
-            break;
-    }
+        nextDrawTime = millis() + 20;
+        display.clearBuffer();    
+        // display.drawBox(fpos, 0, payloadSize - fpos, 1);
 
-    display.sendBuffer();
+        // for (int i = 0; i < 128; i+= 2)
+        // {
+        //     display.drawBox(i, 58, 1, 2);
+        // }
+
+        // display.drawBox(checksum[0] * 2, 60, 2, 1);
+        // display.drawBox(buffer[payloadSize - 2] * 2, 61, 2, 1);
+        // display.drawBox(checksum[1] * 2, 62, 2, 1);
+        // display.drawBox(buffer[payloadSize - 1] * 2, 63, 2, 1);
+
+        switch(mode)
+        {
+            case STATUSTEXT:
+                renderStatusText();
+                break;
+            case VALUES:
+                renderValues();
+                break;
+            default:
+                mode = STATUSTEXT;
+                break;
+        }
+
+        display.sendBuffer();
+    }
 }
