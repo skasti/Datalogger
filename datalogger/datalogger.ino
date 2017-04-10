@@ -22,7 +22,12 @@ unsigned long ms = 0;
 unsigned long nextLogTime = 0;
 unsigned long nextDrawTime = 0;
 unsigned long nextInputUpdate = 0;
+unsigned long nextBlink = 0;
+unsigned long nextSignal = 0;
+bool blinkState = false;
 
+unsigned long signalInterval = 1000000;
+unsigned long blinkInterval = 500000;
 unsigned long drawInterval = 60000; // 100ms;
 unsigned long loggingDrawInterval = 250000; // 200ms;
 unsigned long logInterval = 4000; // 4ms;
@@ -41,7 +46,7 @@ int toggleUIPin = 30;
 int toggleState, prevToggleState;
 
 File logFile;
-
+uint8_t signalStrength = 0x00;
 const uint16_t VALUE_COUNT = 14;
 
 struct LogLine
@@ -119,6 +124,8 @@ void setup() {
   Serial.begin(9600);
   digitalWrite(13,LOW);
 
+  gpuClient.sendSignal(signalStrength);
+  
   gpuClient.sendMode(STATUSTEXT);
   delay(10);  
   sendDebug("IR INIT");
@@ -496,8 +503,38 @@ void loop()
   if (isMenu)
     menu.render(gpuClient);
 
-  if (gps.hasTimeFix())
-    digitalWrite(13, HIGH);
-  else
-    digitalWrite(13, LOW);
+  if (ms > nextBlink)
+  {
+    blinkState = !blinkState;
+
+    if (blinkState)
+      digitalWrite(13, HIGH);
+    else
+      digitalWrite(13, LOW);
+
+    nextBlink = ms + blinkInterval;
+  }
+
+  if (ms > nextSignal)
+  {
+    nextSignal = ms + signalInterval;
+
+    uint32_t hAcc = pvt.hAcc / 1000;
+
+    if (hAcc <= 1)
+      signalStrength = 0xFF;
+    else if (hAcc <= 2)
+      signalStrength = 0xE0;
+    else if (hAcc <= 4)
+      signalStrength = 0xC0;
+    else if (hAcc <= 8)
+      signalStrength = 0xA0;
+    else if (hAcc <= 16)
+      signalStrength = 0x80;
+    else if (pvt.fixType >= 2)
+      signalStrength = 0x10;
+
+    gpuClient.sendSignal(signalStrength);
+  }
+  
 }

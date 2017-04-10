@@ -180,7 +180,7 @@ void Menu::render(NanoGpuClient gpu)
     if (millis() > nextRender)
     {
         gpu.sendStatus(getCurrentText());
-        nextRender = millis() + 20;
+        nextRender = millis() + 60;
     }
 }
 

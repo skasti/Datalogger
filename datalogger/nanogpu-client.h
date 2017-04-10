@@ -23,6 +23,7 @@ class NanoGpuClient{
         void sendValues(uint16_t* values);
         void sendStatus(char status[]);
         void sendMode(GPU_MODE mode);
+        void sendSignal(uint8_t signalStrength);
         void sendCalibrate(uint8_t channel);
         void sendStoreCalibration(uint8_t channel);
         void sendResetCalibration(uint8_t channel);

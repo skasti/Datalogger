@@ -15,6 +15,7 @@ class NanoGpu {
 
     GPU_MODE mode = STATUSTEXT;    
     char status[10] = "IDLE";
+    uint8_t signalStrength = 0x00;
     uint16_t values[VALUES_COUNT] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0};
     uint16_t mins[VALUES_COUNT] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0};
     uint16_t maxs[VALUES_COUNT] = {120,120,120,120,120,120,1000,1000,1000,1000,1000,1000,1000,1000};
@@ -29,11 +30,13 @@ class NanoGpu {
         void storeCalibration();
         void readCalibration();
         void updateStatus();
+        void updateSignal();
         void updateValues(); 
         bool checksumIsValid();
         void processSerial();
         void renderStatusText();
         void renderValues();
+        void renderSignal();
 
         void readEEPROM();
         void initEEPROM();

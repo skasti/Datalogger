@@ -13,6 +13,11 @@ const unsigned char PKG_MODE_ID = 0x03;
 const unsigned char PKG_CALIBRATE_ID = 0x04;
 const unsigned char PKG_STORE_CALIBRATION_ID = 0x05;
 const unsigned char PKG_READ_CALIBRATION_ID = 0x06;
+const unsigned char PKG_SIGNAL_ID = 0x07;
+
+struct PKG_SIGNAL {
+    uint8_t signalStrength;
+};
 
 struct PKG_VALUES {
     uint16_t values[VALUES_COUNT];

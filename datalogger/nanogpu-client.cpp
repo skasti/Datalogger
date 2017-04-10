@@ -114,3 +114,8 @@ void NanoGpuClient::sendResetCalibration(uint8_t channel)
 {
     sendPacket(PKG_READ_CALIBRATION_ID, (unsigned char*)&channel, sizeof(PKG_READ_CALIBRATION), true);    
 }
+
+void NanoGpuClient::sendSignal(uint8_t signalStrength)
+{
+    sendPacket(PKG_SIGNAL_ID, (unsigned char*)&signalStrength, sizeof(PKG_SIGNAL), true);    
+}

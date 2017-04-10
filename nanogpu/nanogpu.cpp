@@ -148,6 +148,10 @@ void NanoGpu::processSerial()
                     fpos++;
                     payloadSize = sizeof(GPU_HEADER) + sizeof(PKG_READ_CALIBRATION) + CHECKSUM_LENGTH;
                     break;
+                case PKG_SIGNAL_ID:
+                    fpos++;
+                    payloadSize = sizeof(GPU_HEADER) + sizeof(PKG_SIGNAL) + CHECKSUM_LENGTH;
+                    break;
                 default:
                     fpos = 0;
                     break;
@@ -185,6 +189,9 @@ void NanoGpu::processSerial()
                                 break;
                             case PKG_READ_CALIBRATION_ID:
                                 readCalibration();
+                                break;
+                            case PKG_SIGNAL_ID:
+                                updateSignal();
                                 break;
                             default:
                                 break;
@@ -296,6 +303,12 @@ void NanoGpu::updateStatus()
     setStatus(statusPackage.characters);
 }
 
+void NanoGpu::updateSignal()
+{
+    PKG_SIGNAL signalPackage = *((PKG_SIGNAL*)(&buffer));
+    signalStrength = signalPackage.signalStrength;
+}
+
 void NanoGpu::renderValues()
 {
     int width = 128 / VALUES_COUNT - 2;
@@ -325,6 +338,11 @@ void NanoGpu::renderStatusText()
     display.drawStr(5,25,status);    
 }
 
+void NanoGpu::renderSignal()
+{
+    display.drawBox(0, 0, signalStrength / 2, 5);
+}
+
 void NanoGpu::update()
 {
     if (Serial.available())
@@ -334,6 +352,8 @@ void NanoGpu::update()
     {
         nextDrawTime = millis() + 20;
         display.clearBuffer();    
+
+        renderSignal();
         // display.drawBox(fpos, 0, payloadSize - fpos, 1);
 
         // for (int i = 0; i < 128; i+= 2)
