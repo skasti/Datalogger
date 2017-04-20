@@ -20,6 +20,7 @@ class Menu
     uint16_t currentParent = 0x0000;
 
     long nextRender = 0;
+    bool hasChanged = true;
 
     private:
         void setParent(uint16_t newParent);

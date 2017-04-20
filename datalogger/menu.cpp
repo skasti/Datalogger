@@ -153,21 +153,26 @@ uint16_t Menu::update()
     if (upState == LOW && prevUp == HIGH) 
     {
         up();
-        Serial.print("UP: ");
-        Serial.println(currentItemIndex);
+        hasChanged = true;
+
+        // Serial.print("UP: ");
+        // Serial.println(currentItemIndex);
     }
     if (downState == LOW && prevDown == HIGH) 
     {
         down();
-        Serial.print("DOWN: ");
-        Serial.println(currentItemIndex);
+        hasChanged = true;
+
+        // Serial.print("DOWN: ");
+        // Serial.println(currentItemIndex);
     }
     if (enterState == LOW && prevEnter == HIGH) 
     {
         uint16_t result =  enter();     
-        
-        Serial.print("ENTER: ");
-        Serial.println(currentParent);
+        hasChanged = true;
+
+        // Serial.print("ENTER: ");
+        // Serial.println(currentParent);       
 
         return result;
     }
@@ -179,8 +184,12 @@ void Menu::render(NanoGpuClient gpu)
 {
     if (millis() > nextRender)
     {
-        gpu.sendStatus(getCurrentText());
-        nextRender = millis() + 60;
+        if (hasChanged)
+        {
+            hasChanged = false;
+            gpu.sendStatus(getCurrentText());
+        }
+        nextRender = millis() + 120;
     }
 }
 

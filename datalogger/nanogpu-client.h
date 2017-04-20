@@ -14,15 +14,18 @@
 const bool ISDEBUG = false;
 
 class NanoGpuClient{
+    int gpuMode = STATUSTEXT;
+
     private:
         void calcCheckSum(unsigned char* CK, unsigned char* payload, int payloadSize);
-        void sendPacket(unsigned char packetId, unsigned char* payload, int payloadSize, bool confirm);
+        bool sendPacket(unsigned char packetId, unsigned char* payload, int payloadSize, bool confirm);
         
     public:
         void setup();
         void sendValues(uint16_t* values);
         void sendStatus(char status[]);
         void sendMode(GPU_MODE mode);
+        int  getMode();
         void sendSignal(uint8_t signalStrength);
         void sendCalibrate(uint8_t channel);
         void sendStoreCalibration(uint8_t channel);

@@ -19,7 +19,7 @@ void NanoGpuClient::calcCheckSum(unsigned char* CK, unsigned char* payload, int 
     }
 }
 
-void NanoGpuClient::sendPacket(unsigned char packetId, unsigned char* payload, int payloadSize, bool confirm)
+bool NanoGpuClient::sendPacket(unsigned char packetId, unsigned char* payload, int payloadSize, bool confirm)
 {
     unsigned char checksum[2];
     memset(checksum, 0, 2);
@@ -61,11 +61,19 @@ void NanoGpuClient::sendPacket(unsigned char packetId, unsigned char* payload, i
         }
     }
     while(response != 0x00);
+
+    if (response == 0x00)
+        return true;
+
+    return false;
 }
 
 void NanoGpuClient::sendMode(GPU_MODE mode)
 {
-    sendPacket(PKG_MODE_ID, (unsigned char*)&mode, sizeof(PKG_MODE), true);    
+    if (sendPacket(PKG_MODE_ID, (unsigned char*)&mode, sizeof(PKG_MODE), true))
+    {
+        gpuMode = mode;
+    }    
 }
 
 void NanoGpuClient::sendStatus(char status[])
@@ -117,5 +125,10 @@ void NanoGpuClient::sendResetCalibration(uint8_t channel)
 
 void NanoGpuClient::sendSignal(uint8_t signalStrength)
 {
-    sendPacket(PKG_SIGNAL_ID, (unsigned char*)&signalStrength, sizeof(PKG_SIGNAL), true);    
+    sendPacket(PKG_SIGNAL_ID, (unsigned char*)&signalStrength, sizeof(PKG_SIGNAL), false);    
+}
+
+int NanoGpuClient::getMode()
+{
+    return gpuMode;
 }

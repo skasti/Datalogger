@@ -28,8 +28,8 @@ bool blinkState = false;
 
 unsigned long signalInterval = 1000000;
 unsigned long blinkInterval = 500000;
-unsigned long drawInterval = 60000; // 100ms;
-unsigned long loggingDrawInterval = 250000; // 200ms;
+unsigned long drawInterval = 100000; // 100ms;
+unsigned long loggingDrawInterval = 250000; // 250ms;
 unsigned long logInterval = 4000; // 4ms;
 unsigned long inputUpdateInterval = 20000; // 20ms;
 
@@ -326,16 +326,7 @@ void toggleLogging()
 
 void toggleUI()
 {
-  if (isMenu)
-  {
-    gpuClient.sendMode(VALUES);
-    isMenu = false;
-  }
-  else
-  {
-    gpuClient.sendMode(STATUSTEXT);
-    isMenu = true;
-  }
+  isMenu = !isMenu;
 }
 
 void channelSelect(int channel)
@@ -432,6 +423,8 @@ void loop()
 
   if (ms > nextInputUpdate)
   {
+    nextInputUpdate = ms + inputUpdateInterval;
+
     updateToggleUIButton();
 
     if (isMenu)
@@ -491,26 +484,35 @@ void loop()
         default:
           break;
       }
-
-      //gpuClient.sendMode(STATUSTEXT);
-    } else {
-      //gpuClient.sendMode(VALUES);
+      
+      if (gpuClient.getMode() != STATUSTEXT)
+      {
+        gpuClient.sendMode(STATUSTEXT);
+      }
+    } 
+    else
+    {
+      if (gpuClient.getMode() != VALUES)
+        gpuClient.sendMode(VALUES);
     }
-
-    nextInputUpdate = ms + inputUpdateInterval;
   }
 
   if (isMenu)
     menu.render(gpuClient);
 
+  if (isMenu)
+    digitalWrite(13, HIGH);
+  else
+    digitalWrite(13, LOW);
+
   if (ms > nextBlink)
   {
     blinkState = !blinkState;
 
-    if (blinkState)
-      digitalWrite(13, HIGH);
-    else
-      digitalWrite(13, LOW);
+    // if (blinkState)
+    //   digitalWrite(13, HIGH);
+    // else
+    //   digitalWrite(13, LOW);
 
     nextBlink = ms + blinkInterval;
   }

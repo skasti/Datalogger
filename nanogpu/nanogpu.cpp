@@ -222,6 +222,11 @@ void NanoGpu::updateMode()
 {
     PKG_MODE modePackage = *((PKG_MODE*)(&buffer));
     mode = (GPU_MODE) modePackage.mode;
+
+    if (mode == VALUES)
+        digitalWrite(13, HIGH);
+    else
+        digitalWrite(13, LOW);
 }
 
 void NanoGpu::updateCalibration()

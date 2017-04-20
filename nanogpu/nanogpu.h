@@ -10,7 +10,7 @@ class NanoGpu {
     int payloadSize = 3;
     byte package = 0x00;
     unsigned char checksum[2] = {0x00, 0x00};
-    unsigned char buffer[64];
+    unsigned char buffer[40];
     U8G2_SH1106_128X64_NONAME_F_HW_I2C display = U8G2_SH1106_128X64_NONAME_F_HW_I2C(U8G2_R0);
 
     GPU_MODE mode = STATUSTEXT;    
