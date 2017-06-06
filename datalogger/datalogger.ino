@@ -38,10 +38,10 @@ int inputs[] = { A0,A1,A2,A3,A4,A5,A6,A7 };
 int sdCardPin = 53;
 bool sdCardInitialized = false;
 
-int upPin = 24;
-int downPin = 26;
-int enterPin = 28;
-int toggleUIPin = 30;
+int upPin = 30;
+int downPin = 32;
+int enterPin = 34;
+int toggleUIPin = 36;
 
 int toggleState, prevToggleState;
 
@@ -222,9 +222,17 @@ void initSD()
 
 void updateIRTemps()
 {
+  unsigned long start = millis();
   if (irEnabled[currentIR] && ir[currentIR].read()) {
     temp[currentIR] = ir[currentIR].object();
   }  
+  int duration = millis() - start;
+
+  if (duration > 10)
+  {
+    irEnabled[currentIR] = false;
+  }
+
 
   currentIR++;
 

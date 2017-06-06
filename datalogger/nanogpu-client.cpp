@@ -21,6 +21,9 @@ void NanoGpuClient::calcCheckSum(unsigned char* CK, unsigned char* payload, int 
 
 bool NanoGpuClient::sendPacket(unsigned char packetId, unsigned char* payload, int payloadSize, bool confirm)
 {
+    if (!enabled)
+        return false;
+
     unsigned char checksum[2];
     memset(checksum, 0, 2);
     
@@ -48,9 +51,23 @@ bool NanoGpuClient::sendPacket(unsigned char packetId, unsigned char* payload, i
 
         if (confirm)
         {
-            while (GPU.available() == 0) {}
+            int timeout = millis() + 100;
+            while (GPU.available() == 0) {
+                if (millis() >= timeout)
+                {
+                    failCount ++;
 
-            response = GPU.read();
+                    if (failCount > 10)
+                        enabled = false;
+                        
+                    break;
+                }
+            }
+
+            if (GPU.available() >= 1)
+                response = GPU.read();
+            else
+                response = 0xFF;
 
             if (tries > 5)
                 break;

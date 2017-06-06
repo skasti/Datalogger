@@ -15,6 +15,8 @@ const bool ISDEBUG = false;
 
 class NanoGpuClient{
     int gpuMode = STATUSTEXT;
+    bool enabled = true;
+    int failCount = 0;
 
     private:
         void calcCheckSum(unsigned char* CK, unsigned char* payload, int payloadSize);
@@ -30,6 +32,7 @@ class NanoGpuClient{
         void sendCalibrate(uint8_t channel);
         void sendStoreCalibration(uint8_t channel);
         void sendResetCalibration(uint8_t channel);
+        bool isEnabled();
 };
 
 #endif
