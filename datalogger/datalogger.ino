@@ -42,8 +42,11 @@ int upPin = 30;
 int downPin = 32;
 int enterPin = 34;
 int toggleUIPin = 36;
+int toggleLoggingPin = 38;
 
-int toggleState, prevToggleState;
+int toggleUIState, prevToggleUIState, toggleLoggingState, prevToggleLoggingState;
+unsigned long toggleLoggingStart = 0;
+bool loggingToggled = false;
 
 File logFile;
 uint8_t signalStrength = 0x00;
@@ -158,7 +161,9 @@ void setup() {
   }
 
   pinMode(toggleUIPin, INPUT_PULLUP);
-  toggleState = digitalRead(toggleUIPin);
+  pinMode(toggleLoggingPin, INPUT_PULLUP);
+  toggleUIState = digitalRead(toggleUIPin);
+  updateToggleLoggingButton();
 
   getGPSFix();
 
@@ -379,12 +384,31 @@ void resetCalibration()
 
 void updateToggleUIButton()
 {
-  prevToggleState = toggleState;
-  toggleState = digitalRead(toggleUIPin);
+  prevToggleUIState = toggleUIState;
+  toggleUIState = digitalRead(toggleUIPin);
 
-  if (toggleState == LOW && prevToggleState == HIGH)
+  if (toggleUIState == LOW && prevToggleUIState == HIGH)
   {
     toggleUI();
+  }
+}
+
+void updateToggleLoggingButton()
+{
+  prevToggleLoggingState = toggleLoggingState;
+  toggleLoggingState = digitalRead(toggleLoggingPin);
+
+  if (toggleLoggingState == LOW && prevToggleLoggingState == HIGH)
+  {
+    toggleLoggingStart = millis();
+    loggingToggled = false;
+  } 
+  else if (toggleLoggingState == LOW) {
+    if ((millis() - toggleLoggingStart > 2000) && !loggingToggled)
+    {
+      toggleLogging();
+      loggingToggled = true;
+    }
   }
 }
 
@@ -434,6 +458,7 @@ void loop()
     nextInputUpdate = ms + inputUpdateInterval;
 
     updateToggleUIButton();
+    updateToggleLoggingButton();  
 
     if (isMenu)
     {
