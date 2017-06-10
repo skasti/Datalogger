@@ -42,7 +42,10 @@ int upPin = 30;
 int downPin = 32;
 int enterPin = 34;
 int toggleUIPin = 36;
-int toggleLoggingPin = 38;
+int toggleLoggingPin = 40;
+int redLedPin = 45;
+int greenLedPin = 42;
+int blueLedPin = 44;
 
 int toggleUIState, prevToggleUIState, toggleLoggingState, prevToggleLoggingState;
 unsigned long toggleLoggingStart = 0;
@@ -122,6 +125,13 @@ void sendDebug(char text[])
 }
 
 void setup() {
+
+  pinMode(redLedPin, OUTPUT);
+  pinMode(greenLedPin, OUTPUT);
+  pinMode(blueLedPin, OUTPUT);
+
+  analogWrite(redLedPin,40);
+
   gps.setup();
   gpuClient.setup();
   Serial.begin(9600);
@@ -172,6 +182,8 @@ void setup() {
   digitalWrite(13,LOW);
 
   initSD();
+  analogWrite(redLedPin,LOW);
+  analogWrite(greenLedPin, 40);
 }
 
 void getGPSFix()
@@ -542,10 +554,27 @@ void loop()
   {
     blinkState = !blinkState;
 
-    // if (blinkState)
-    //   digitalWrite(13, HIGH);
-    // else
-    //   digitalWrite(13, LOW);
+    int ledPin = greenLedPin;
+    
+    if (isLogging)
+    {
+      ledPin = blueLedPin;
+      digitalWrite(greenLedPin, LOW);
+    }
+    else
+    {
+      digitalWrite(blueLedPin, LOW);
+    }
+
+    if (blinkState)
+    {
+      if ((ledPin >= 44) && (ledPin <= 46))
+        analogWrite(ledPin, 40);
+      else
+        digitalWrite(ledPin, HIGH);
+    }
+    else
+       digitalWrite(ledPin, LOW);
 
     nextBlink = ms + blinkInterval;
   }
