@@ -7,6 +7,7 @@
 #include "nanogpu-client.h"
 #include "SparkFunMLX90614.h"
 #include "menu.h"
+#include <EEPROM.h>
 
 #define DEBUG Serial
 
@@ -18,12 +19,19 @@
   bool debug = false;
 #endif
 
+const int AUTOSTART_EEPROM = 0;
+bool autoStart = true;
+unsigned long autoStartSpeedThreshold = 30 * 0.277 * 1000; // 30kph -> m/s -> mm/s
+unsigned long autoStartDurationThreshold = 2000; // 2sec;
+unsigned long autoStartStart = 0;
+
 unsigned long ms = 0;
 unsigned long nextLogTime = 0;
 unsigned long nextDrawTime = 0;
 unsigned long nextInputUpdate = 0;
 unsigned long nextBlink = 0;
 unsigned long nextSignal = 0;
+unsigned long nextFlush = 0;
 bool blinkState = false;
 
 unsigned long signalInterval = 1000000;
@@ -32,6 +40,7 @@ unsigned long drawInterval = 100000; // 100ms;
 unsigned long loggingDrawInterval = 250000; // 250ms;
 unsigned long logInterval = 4000; // 4ms;
 unsigned long inputUpdateInterval = 20000; // 20ms;
+unsigned long flushInterval = 10000000; // 10sec;
 
 int inputs[] = { A0,A1,A2,A3,A4,A5,A6,A7 };
 
@@ -113,10 +122,11 @@ MenuItem menuItems[] = {
       MenuItem(0x2510, 0x2500, 0x2000, "OK"),
       MenuItem(0x2520, 0x2500, 0x2000, "Abort"),
     MenuItem(0x2600, 0x2000, 0x0000, "BACK"),
-  MenuItem(0x3000, 0x0000, 0x0000, "Toggle UI")
+  MenuItem(0x3000, 0x0000, 0x0000, "Toggle UI"),
+  MenuItem(0x4000, 0x0000, 0x0000, "Auto ON")
 };
 
-Menu menu(upPin,downPin,enterPin, menuItems, 27);
+Menu menu(upPin,downPin,enterPin, menuItems, 28);
 
 void sendDebug(char text[])
 {
@@ -135,6 +145,10 @@ void setup() {
   gps.setup();
   gpuClient.setup();
   Serial.begin(9600);
+
+  autoStart = (EEPROM.read(AUTOSTART_EEPROM) == 0);
+  updateAutoStartMenuItem(); 
+
   digitalWrite(13,LOW);
 
   gpuClient.sendSignal(signalStrength);
@@ -184,6 +198,14 @@ void setup() {
   initSD();
   analogWrite(redLedPin,LOW);
   analogWrite(greenLedPin, 40);
+}
+
+void updateAutoStartMenuItem()
+{
+  if (autoStart)
+    menu.setText(0x4000, "Auto ON");
+  else
+    menu.setText(0x4000, "Auto ON");
 }
 
 void getGPSFix()
@@ -424,6 +446,37 @@ void updateToggleLoggingButton()
   }
 }
 
+void updateAutoStart()
+{
+  if (isLogging)
+    return;
+
+  if (!autoStart)
+    return;
+
+  if (pvt.gSpeed < autoStartSpeedThreshold)
+    autoStartStart = 0;
+  else if (autoStartStart > 0)
+  {
+    if (millis() - autoStartStart > autoStartDurationThreshold)
+      toggleLogging();
+  }
+  else
+    autoStartStart = millis();
+}
+
+void toggleAutoStart()
+{
+  autoStart = !autoStart;
+
+  if (autoStart)
+    EEPROM.write(AUTOSTART_EEPROM, 0);
+  else
+    EEPROM.write(AUTOSTART_EEPROM, 0xFF);
+
+  updateAutoStartMenuItem();
+}
+
 void loop()
 {
   //Stuff that always should be done:
@@ -456,6 +509,12 @@ void loop()
     if (isLogging)
     {
       logFile.write((const uint8_t *)&line, sizeof(line));
+
+      if (ms > nextFlush)
+      {
+        nextFlush = ms + flushInterval;
+        logFile.flush();
+      }
     }
 
     nextLogTime = ms + logInterval;
@@ -471,6 +530,7 @@ void loop()
 
     updateToggleUIButton();
     updateToggleLoggingButton();  
+    updateAutoStart();
 
     if (isMenu)
     {
@@ -483,6 +543,9 @@ void loop()
           break;
         case 0x3000: //Toggle UI
           toggleUI();
+          break;
+        case 0x4000: //Toggle Autostart
+          toggleAutoStart();
           break;
 
         case 0x2110: //Select Ch 1
