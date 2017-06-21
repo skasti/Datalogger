@@ -205,7 +205,7 @@ void updateAutoStartMenuItem()
   if (autoStart)
     menu.setText(0x4000, "Auto ON");
   else
-    menu.setText(0x4000, "Auto ON");
+    menu.setText(0x4000, "Auto OFF");
 }
 
 void getGPSFix()
