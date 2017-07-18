@@ -21,7 +21,9 @@
 
 const int AUTOSTART_EEPROM = 0;
 bool autoStart = true;
+unsigned int autoStartMode = 1; //0 = speed, 1 = fixType
 unsigned long autoStartSpeedThreshold = 30 * 0.277 * 1000; // 30kph -> m/s -> mm/s
+unsigned int autoStartFixType = 2; //3 = Full 3D
 unsigned long autoStartDurationThreshold = 2000; // 2sec;
 unsigned long autoStartStart = 0;
 
@@ -146,6 +148,7 @@ void setup() {
   gpuClient.setup();
   Serial.begin(9600);
 
+  
   autoStart = (EEPROM.read(AUTOSTART_EEPROM) == 0);
   updateAutoStartMenuItem(); 
 
@@ -454,15 +457,29 @@ void updateAutoStart()
   if (!autoStart)
     return;
 
-  if (pvt.gSpeed < autoStartSpeedThreshold)
-    autoStartStart = 0;
-  else if (autoStartStart > 0)
+  if (autoStartMode == 0)
   {
-    if (millis() - autoStartStart > autoStartDurationThreshold)
-      toggleLogging();
+    if (pvt.gSpeed < autoStartSpeedThreshold)
+      autoStartStart = 0;
+    else if (autoStartStart > 0)
+    {
+      if (millis() - autoStartStart > autoStartDurationThreshold)
+        toggleLogging();
+    }
+    else
+      autoStartStart = millis();
+  } else if (autoStartMode == 1)
+  {
+    if (pvt.fixType < autoStartFixType)
+      autoStartStart = 0;
+    else if (autoStartStart > 0)
+    {
+      if (millis() - autoStartStart > autoStartDurationThreshold)
+        toggleLogging();
+    }
+    else
+      autoStartStart = millis();
   }
-  else
-    autoStartStart = millis();
 }
 
 void toggleAutoStart()
