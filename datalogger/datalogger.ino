@@ -21,7 +21,7 @@
 
 const int AUTOSTART_EEPROM = 0;
 bool autoStart = true;
-unsigned int autoStartMode = 1; //0 = speed, 1 = fixType
+unsigned int autoStartMode = 1; //0 = speed, 1 = fixType, 2 = Power (always log)
 unsigned long autoStartSpeedThreshold = 30 * 0.277 * 1000; // 30kph -> m/s -> mm/s
 unsigned int autoStartFixType = 2; //3 = Full 3D
 unsigned long autoStartDurationThreshold = 2000; // 2sec;
@@ -97,6 +97,15 @@ bool isMenu = true;
 bool isCalibrating = false;
 int calibrateIndex = 0xFF;
 
+char* irNames[] = {
+  "IR0: RL",
+  "IR1: RM",
+  "IR2: RR",
+  "IR3: FL",
+  "IR4: FM",
+  "IR5: FR"
+};
+
 MenuItem menuItems[] = {
   MenuItem(0x1000, 0x0000, 0x1000, "Start Log"),
     MenuItem(0x1100, 0x1000, 0x0000, "OK"),
@@ -134,6 +143,12 @@ void sendDebug(char text[])
 {
   gpuClient.sendStatus(text);
   Serial.println(text);
+  Serial3.print("debug.txt=\"");
+  Serial3.print(text);
+  Serial3.print("\"");
+  Serial3.write(0xFF);
+  Serial3.write(0xFF);
+  Serial3.write(0xFF);
 }
 
 void setup() {
@@ -147,8 +162,9 @@ void setup() {
   gps.setup();
   gpuClient.setup();
   Serial.begin(9600);
+  Serial3.begin(9600);
 
-  
+  EEPROM.write(AUTOSTART_EEPROM, 0);  
   autoStart = (EEPROM.read(AUTOSTART_EEPROM) == 0);
   updateAutoStartMenuItem(); 
 
@@ -174,6 +190,7 @@ void setup() {
 
     if (ir[i].read())
     {
+      sendDebug(irNames[i]);
       irEnabled[i] = true;
     }
   }
@@ -191,8 +208,6 @@ void setup() {
   pinMode(toggleLoggingPin, INPUT_PULLUP);
   toggleUIState = digitalRead(toggleUIPin);
   updateToggleLoggingButton();
-
-  getGPSFix();
 
   digitalWrite(13,HIGH);
   delay(250);
@@ -266,16 +281,23 @@ void updateIRTemps()
 {
   unsigned long start = millis();
   if (irEnabled[currentIR] && ir[currentIR].read()) {
+    // int prev = temp[currentIR];
     temp[currentIR] = ir[currentIR].object();
-  }  
-  int duration = millis() - start;
+    int duration = millis() - start;
 
-  if (duration > 10)
-  {
-    irEnabled[currentIR] = false;
+    if (duration > 10)
+    {
+      sendDebug("Disable IR");
+      irEnabled[currentIR] = false;
+    }
+
+    // if(prev != temp[currentIR])
+    // {
+    //   char buf [8];
+    //   sprintf (buf, "IR: %03i", temp[currentIR]);
+    //   sendDebug(buf);
+    // }
   }
-
-
   currentIR++;
 
   if (currentIR > 5)
@@ -351,6 +373,7 @@ bool initLogFile()
 
 void toggleLogging()
 {
+  sendDebug("ToggleLog");
   if (isLogging)
   {
     logFile.flush();
@@ -479,6 +502,15 @@ void updateAutoStart()
     }
     else
       autoStartStart = millis();
+  } else if (autoStartMode == 2)
+  { 
+    if (autoStartStart > 0)
+    {
+      if (millis() - autoStartStart > autoStartDurationThreshold)
+        toggleLogging();
+    }
+    else
+      autoStartStart = millis();
   }
 }
 
@@ -514,12 +546,21 @@ void loop()
     line.vAcc = pvt.vAcc;
     line.fixType = pvt.fixType;
 
+    int prev = 0;
     for (int i = 0; i < VALUE_COUNT; i++) {
       if (i < 6)
       {
         line.values[i] = temp[i];
       } else {
+        // prev = line.values[i];
         line.values[i] = analogRead(inputs[i-6]);
+
+        // if (prev != line.values[i])
+        // {
+        //   char buf [8];
+        //   sprintf (buf, "V%i: %i", i, line.values[i]);
+        //   sendDebug(buf);
+        // }
       }    
     }
 
