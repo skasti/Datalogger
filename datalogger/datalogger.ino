@@ -8,6 +8,9 @@
 #include "SparkFunMLX90614.h"
 #include "menu.h"
 #include <EEPROM.h>
+#include <WString.h>
+#include "nextionDisplay.h"
+
 
 #define DEBUG Serial
 
@@ -86,6 +89,12 @@ NAV_PVT     pvt;
 
 Gps gps;
 NanoGpuClient gpuClient;
+NextionDisplay display;
+
+String pollValuesCmd = String("pollValues");
+String toggleAutoCmd = String("toggleAuto");
+String getAutoCmd = String("getAuto");
+
 uint8_t irIds[] = {0x10,0x11,0x12,0x13,0x14,0x15};
 IRTherm ir[6];
 int16_t temp[6] = {0,0,0,0,0,0};
@@ -104,6 +113,13 @@ char* irNames[] = {
   "IR3: FL",
   "IR4: FM",
   "IR5: FR"
+};
+
+char* channelComponentNames[] = {
+  "t0", "t1", "t2",  //Rear temps (RL, RM, RR)
+  "t3", "t4", "t5", //Front temps (FL, FM, FR)
+  "a0", "a1", "a2", "a3", //First set of analogs
+  "a4", "a5", "a6", "a7", //Second set of analogs
 };
 
 MenuItem menuItems[] = {
@@ -143,12 +159,7 @@ void sendDebug(char text[])
 {
   gpuClient.sendStatus(text);
   Serial.println(text);
-  Serial3.print("debug.txt=\"");
-  Serial3.print(text);
-  Serial3.print("\"");
-  Serial3.write(0xFF);
-  Serial3.write(0xFF);
-  Serial3.write(0xFF);
+  display.debug(text);
 }
 
 void setup() {
@@ -160,9 +171,11 @@ void setup() {
   analogWrite(redLedPin,40);
 
   gps.setup();
+
   gpuClient.setup();
+  display.setup();
+
   Serial.begin(9600);
-  Serial3.begin(9600);
 
   EEPROM.write(AUTOSTART_EEPROM, 0);  
   autoStart = (EEPROM.read(AUTOSTART_EEPROM) == 0);
@@ -290,13 +303,6 @@ void updateIRTemps()
       sendDebug("Disable IR");
       irEnabled[currentIR] = false;
     }
-
-    // if(prev != temp[currentIR])
-    // {
-    //   char buf [8];
-    //   sprintf (buf, "IR: %03i", temp[currentIR]);
-    //   sendDebug(buf);
-    // }
   }
   currentIR++;
 
@@ -514,6 +520,14 @@ void updateAutoStart()
   }
 }
 
+void sendAutoStart()
+{
+  if (autoStart)
+    display.sendValue("autoStartBtn", "Auto ON");
+  else
+    display.sendValue("autoStartBtn", "Auto OFF");
+}
+
 void toggleAutoStart()
 {
   autoStart = !autoStart;
@@ -524,6 +538,7 @@ void toggleAutoStart()
     EEPROM.write(AUTOSTART_EEPROM, 0xFF);
 
   updateAutoStartMenuItem();
+  sendAutoStart();
 }
 
 void loop()
@@ -548,20 +563,19 @@ void loop()
 
     int prev = 0;
     for (int i = 0; i < VALUE_COUNT; i++) {
+      // prev = line.values[i];
+
       if (i < 6)
       {
         line.values[i] = temp[i];
-      } else {
-        // prev = line.values[i];
+      } else {        
         line.values[i] = analogRead(inputs[i-6]);
+      }
 
-        // if (prev != line.values[i])
-        // {
-        //   char buf [8];
-        //   sprintf (buf, "V%i: %i", i, line.values[i]);
-        //   sendDebug(buf);
-        // }
-      }    
+      // if (prev != line.values[i])
+      // {
+      //   display.sendValue(channelComponentNames[i], line.values[i]);
+      // }
     }
 
     if (isLogging)
@@ -580,6 +594,25 @@ void loop()
 
   if (!draw() || !isLogging) {
     updateIRTemps();
+  }
+
+  if (display.hasCommand())
+  {
+    String command = display.getCommand();
+
+    if (command.equals(pollValuesCmd))
+    {
+      for (int i = 0; i < VALUE_COUNT; i++)
+        display.sendValue(channelComponentNames[i], line.values[i]);
+    }
+    else if (command.equals(toggleAutoCmd))
+    {
+      toggleAutoStart();
+    }
+    else if (command.equals(getAutoCmd))
+    {
+      sendAutoStart();
+    }
   }
 
   if (ms > nextInputUpdate)
