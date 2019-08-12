@@ -24,7 +24,7 @@ const int AUTOSTART_EEPROM = 0;
 bool autoStart = true;
 unsigned int autoStartMode = 1; //0 = speed, 1 = fixType, 2 = Power (always log)
 unsigned long autoStartSpeedThreshold = 30 * 0.277 * 1000; // 30kph -> m/s -> mm/s
-unsigned int autoStartFixType = 2; //3 = Full 3D
+unsigned int autoStartFixType = 3; //3 = Full 3D
 unsigned long autoStartDurationThreshold = 2000; // 2sec;
 unsigned long autoStartStart = 0;
 
@@ -136,7 +136,6 @@ void setup() {
 
   Serial.begin(9600);
 
-  EEPROM.write(AUTOSTART_EEPROM, 0);  
   autoStart = (EEPROM.read(AUTOSTART_EEPROM) == 0);
 
   digitalWrite(13,LOW);
@@ -284,6 +283,9 @@ bool initLogFile()
 
   while (SD.exists(filename + extension)) {
     sendDebug("FILENAME");
+    char filenameBuffer[20];
+    filename.toCharArray(filenameBuffer, 20);
+    sendDebug(filenameBuffer);
     counter++;
     filename = date + "-" + counter;
   }
@@ -350,6 +352,7 @@ void updateToggleLoggingButton()
   else if (toggleLoggingState == LOW) {
     if ((millis() - toggleLoggingStart > 2000) && !loggingToggled)
     {
+      sendDebug("Button Start");
       toggleLogging();
       loggingToggled = true;
     }
@@ -371,7 +374,10 @@ void updateAutoStart()
     else if (autoStartStart > 0)
     {
       if (millis() - autoStartStart > autoStartDurationThreshold)
+      {
+        sendDebug("Autostarting - M0");
         toggleLogging();
+      }
     }
     else
       autoStartStart = millis();
@@ -382,7 +388,10 @@ void updateAutoStart()
     else if (autoStartStart > 0)
     {
       if (millis() - autoStartStart > autoStartDurationThreshold)
+      {
+        sendDebug("Autostarting - M1");
         toggleLogging();
+      }
     }
     else
       autoStartStart = millis();
@@ -391,7 +400,10 @@ void updateAutoStart()
     if (autoStartStart > 0)
     {
       if (millis() - autoStartStart > autoStartDurationThreshold)
+      {
+        sendDebug("Autostarting - M2");
         toggleLogging();
+      }
     }
     else
       autoStartStart = millis();
@@ -496,7 +508,7 @@ void loop()
   {
     nextInputUpdate = ms + inputUpdateInterval;
 
-    updateToggleLoggingButton();  
+    //updateToggleLoggingButton();  
     updateAutoStart();
   }
 
